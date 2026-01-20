@@ -126,6 +126,29 @@
         CSS: `
             :root {
                 --contrail-font-family: 'Source Han Sans', '思源黑体', 'Source Han Sans SC', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif;
+                
+                /* Light Mode Variables */
+                --contrail-bg: #faf7f2;
+                --contrail-text: #333;
+                --contrail-text-secondary: #666;
+                --contrail-border: #ddd;
+                --contrail-link: #318cfa;
+                --contrail-highlight-bg: #ffd6d6;
+                --contrail-highlight-text: rgb(255, 136, 166);
+                --contrail-shadow: rgba(0,0,0,.25);
+            }
+
+            @media (prefers-color-scheme: dark) {
+                :root {
+                    --contrail-bg: #2d2d2d;
+                    --contrail-text: #e0e0e0;
+                    --contrail-text-secondary: #a0a0a0;
+                    --contrail-border: #444;
+                    --contrail-link: #5ca1ff;
+                    --contrail-highlight-bg: #4a2c2c;
+                    --contrail-highlight-text: #ff88a6;
+                    --contrail-shadow: rgba(0,0,0,.5);
+                }
             }
 
             .horse-highlight,
@@ -136,8 +159,8 @@
             }
 
             .horse-highlight {
-                background: linear-gradient(transparent 60%, #ffd6d6 60%);
-                color: rgb(255, 136, 166);
+                background: linear-gradient(transparent 60%, var(--contrail-highlight-bg) 60%);
+                color: var(--contrail-highlight-text);
                 font-weight: 600;
                 cursor: pointer;
                 position: relative;
@@ -147,45 +170,49 @@
                 position: fixed;
                 top: 0;
                 left: 0;
-                width: 440px;
+                width: 490px;
                 max-height: 80vh;
                 overflow-y: auto;
-                background: #faf7f2;
+                background: var(--contrail-bg);
+                color: var(--contrail-text);
                 border-radius: 12px;
                 padding: 16px;
-                box-shadow: 0 15px 40px rgba(0,0,0,.25);
+                box-shadow: 0 15px 40px var(--contrail-shadow);
                 z-index: 2147483647;
                 font-size: 15px;
                 line-height: 1.5;
                 pointer-events: auto;
                 text-align: left;
                 overscroll-behavior: contain;
-            }
-
-            .horse-tooltip--floating {
-                display: none;
+                
+                /* Animation Initial State */
                 opacity: 0;
-                transition: opacity .15s ease;
+                transform: scale(0.95);
+                transform-origin: center;
+                pointer-events: none;
+                transition: opacity 0.2s cubic-bezier(0.2, 0, 0, 1), transform 0.2s cubic-bezier(0.2, 0, 0, 1);
             }
 
-            .horse-tooltip--floating.horse-tooltip--visible {
-                display: block;
+            .horse-tooltip.horse-tooltip--visible {
                 opacity: 1;
+                transform: scale(1);
+                pointer-events: auto;
             }
 
             .tt-header {
-                border-bottom: 1px solid #ddd;
+                border-bottom: 1px solid var(--contrail-border);
                 margin-bottom: 10px;
             }
 
             .tt-name {
                 font-size: 20px;
                 font-weight: bold;
+                color: var(--contrail-highlight-text);
             }
 
             .tt-sub {
                 font-size: 13px;
-                color: #666;
+                color: var(--contrail-text-secondary);
             }
 
             .tt-grid {
@@ -195,12 +222,12 @@
                 margin-top: 10px;
             }
 
-            .tt-row span,
-            .tt-row strong {
-                color: #333;
+            .tt-row span {
+                color: var(--contrail-text-secondary);
             }
-
+            
             .tt-row strong {
+                color: var(--contrail-text);
                 font-weight: 600;
             }
 
@@ -211,12 +238,12 @@
             .tt-block-title {
                 font-weight: bold;
                 margin-bottom: 4px;
-                color: #333;
+                color: var(--contrail-text);
             }
 
             .tt-block-body {
                 font-size: 14px;
-                color: #333;
+                color: var(--contrail-text);
             }
 
             .tt-collapse {
@@ -226,7 +253,7 @@
             .tt-collapse-title {
                 cursor: pointer;
                 font-weight: bold;
-                color: #318cfa;
+                color: var(--contrail-link);
             }
 
             .tt-collapse-icon {
@@ -241,7 +268,7 @@
             .tt-collapse-body {
                 margin-top: 6px;
                 font-size: 14px;
-                color: #333;
+                color: var(--contrail-text);
             }
         `,
         inject() {
@@ -384,13 +411,42 @@
             });
         },
 
-        highlight(horses) {
-            const map = new Map();
-            horses.forEach(h => h['馬名'] && map.set(h['馬名'], h));
+        setupMutationObserver(map) {
+            const observer = new MutationObserver((mutations) => {
+                let shouldProcess = false;
+                for (const mutation of mutations) {
+                    if (mutation.addedNodes.length > 0) {
+                        shouldProcess = true;
+                        break;
+                    }
+                }
+                if (shouldProcess) {
+                    this.processNodes(document.body, map);
+                }
+            });
 
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+        },
+
+        processNodes(rootNode, map) {
             const walker = document.createTreeWalker(
-                document.body,
-                NodeFilter.SHOW_TEXT
+                rootNode,
+                NodeFilter.SHOW_TEXT,
+                {
+                    acceptNode: (node) => {
+                        // Skip already highlighted nodes or tooltips
+                        if (node.parentElement && (
+                            node.parentElement.classList.contains('horse-highlight') ||
+                            node.parentElement.closest('.horse-tooltip')
+                        )) {
+                            return NodeFilter.FILTER_REJECT;
+                        }
+                        return NodeFilter.FILTER_ACCEPT;
+                    }
+                }
             );
 
             const nodes = [];
@@ -398,32 +454,52 @@
 
             nodes.forEach(node => {
                 const text = node.nodeValue;
-                if (!text) return;
+                if (!text || !text.trim()) return;
 
-                map.forEach((horse, name) => {
-                    if (!text.includes(name)) return;
+                // Simple check before iterating map
+                let found = false;
+                
+                // Convert Map keys to array for iteration to break early
+                for (const [name, horse] of map.entries()) {
+                    if (text.includes(name)) {
+                        // 高亮文本生成
+                        const translation = horse['港译'] || horse['译名'];
+                        const highlightedName = translation
+                            ? `${Utils.escapeHTML(name)}【${Utils.escapeHTML(translation)}】`
+                            : Utils.escapeHTML(name);
 
-                    // 高亮文本生成
-                    const translation = horse['港译'] || horse['译名'];
-                    const highlightedName = translation
-                        ? `${Utils.escapeHTML(name)}【${Utils.escapeHTML(translation)}】`
-                        : Utils.escapeHTML(name);
+                        const span = document.createElement('span');
+                        span.className = 'horse-highlight';
+                        span.innerHTML = highlightedName;
 
-                    const span = document.createElement('span');
-                    span.className = 'horse-highlight';
-                    span.innerHTML = highlightedName;
+                        // 生成 Tooltip
+                        const tooltip = Components.renderTooltip(horse);
+                        document.body.appendChild(tooltip);
+                        // tooltip.classList.add('horse-tooltip--floating'); // Removed, handled by base class + visible class
 
-                    // 生成 Tooltip
-                    const tooltip = Components.renderTooltip(horse);
-                    document.body.appendChild(tooltip);
-                    tooltip.classList.add('horse-tooltip--floating');
+                        // Tooltip 交互逻辑
+                        this.attachTooltipEvents(span, tooltip);
 
-                    // Tooltip 交互逻辑
-                    this.attachTooltipEvents(span, tooltip);
-
-                    node.parentNode.replaceChild(span, node);
-                });
+                        if (node.parentNode) {
+                            node.parentNode.replaceChild(span, node);
+                        }
+                        
+                        found = true;
+                        break; // Only highlight first match per text node to avoid complexity
+                    }
+                }
             });
+        },
+
+        highlight(horses) {
+            const map = new Map();
+            horses.forEach(h => h['馬名'] && map.set(h['馬名'], h));
+
+            // Initial processing
+            this.processNodes(document.body, map);
+            
+            // Setup observer for dynamic content
+            this.setupMutationObserver(map);
         },
 
         attachTooltipEvents(targetSpan, tooltip) {
