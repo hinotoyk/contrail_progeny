@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         云崽高亮器
 // @namespace    https://github.com/hinotoyk/contrail_progeny
-// @version      1.3.0
+// @version      2.0.0
 // @description  一键高亮云崽并展示相关数据
 // @author       hinotoyk
 // @match        https://www.jra.go.jp/*
