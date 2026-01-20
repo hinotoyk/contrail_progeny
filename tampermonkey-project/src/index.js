@@ -148,16 +148,22 @@
             // 如果所有胜鞍都是空白格（普通赛事），只保留最新的3个
             // 如果有分级赛胜鞍，全部展示
             
-            const hasGradedWin = wins.some(w => {
+            const hasOpOrHigherWin = wins.some(w => {
                 const g = (w.grade || '').trim();
-                return g && Constants.GRADE_ORDER.indexOf(g) !== -1 && Constants.GRADE_ORDER.indexOf(g) < 8; // index 8 is ''
+                // OP is index 7 in GRADE_ORDER
+                return g && Constants.GRADE_ORDER.indexOf(g) !== -1 && Constants.GRADE_ORDER.indexOf(g) <= 7;
             });
 
-            if (!hasGradedWin) {
-                return wins.slice(0, 3);
+            if (hasOpOrHigherWin) {
+                // 如果有 OP 以上的胜鞍，过滤掉空白格的胜鞍
+                return wins.filter(w => {
+                    const g = (w.grade || '').trim();
+                    return g && Constants.GRADE_ORDER.indexOf(g) !== -1 && Constants.GRADE_ORDER.indexOf(g) <= 7;
+                });
             }
 
-            return wins;
+            // 否则（只有空白格胜鞍），只保留最新的3个
+            return wins.slice(0, 3);
         },
 
         getLatestRace(races) {
@@ -519,8 +525,17 @@
             .tt-grid {
                 display: grid;
                 grid-template-columns: repeat(2, 1fr);
-                gap: 6px 12px;
+                gap: 8px 16px;
                 margin-top: 10px;
+                background: rgba(0,0,0,0.02);
+                padding: 10px;
+                border-radius: 8px;
+            }
+
+            .tt-row {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
             }
 
             .tt-row span {
@@ -595,6 +610,77 @@
             .tt-race-table td {
                 color: var(--contrail-text);
             }
+
+            /* Stats Card Styles */
+            .tt-stats-card {
+                background: rgba(0,0,0,0.03);
+                border-radius: 8px;
+                padding: 10px;
+                margin-top: 8px;
+            }
+
+            .tt-stats-header {
+                font-size: 16px;
+                font-weight: bold;
+                margin-bottom: 8px;
+                display: flex;
+                align-items: baseline;
+                color: var(--contrail-text);
+            }
+
+            .tt-stats-record {
+                font-family: var(--contrail-font-family);
+                font-size: 14px;
+                color: var(--contrail-text-secondary);
+                margin-left: 4px;
+                font-weight: normal;
+            }
+
+            .tt-stats-grid {
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 8px;
+                margin-bottom: 8px;
+            }
+
+            .tt-stat-item {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                background: rgba(255,255,255,0.5);
+                border-radius: 6px;
+                padding: 4px;
+            }
+
+            .tt-stat-label {
+                font-size: 10px;
+                color: var(--contrail-text-secondary);
+                margin-bottom: 2px;
+            }
+
+            .tt-stat-value {
+                font-size: 14px;
+                font-weight: bold;
+                color: var(--contrail-text);
+            }
+            
+            .tt-stat-row {
+                display: flex;
+                font-size: 13px;
+                margin-top: 4px;
+                line-height: 1.4;
+            }
+
+            .tt-stat-row-label {
+                color: var(--contrail-text-secondary);
+                width: 60px;
+                flex-shrink: 0;
+            }
+
+            .tt-stat-row-value {
+                color: var(--contrail-text);
+                font-weight: 500;
+            }
         `,
         inject() {
             GM_addStyle(this.CSS);
@@ -607,11 +693,11 @@
      */
     const Components = {
         row(label, val) {
-            const value = val ? Utils.escapeHTML(val) : '/';
+            const value = val ? Utils.escapeHTML(val) : '<span style="color:#ccc">/</span>';
             return `
             <div class="tt-row">
-                <span>${label}</span>
-                <strong>${value}</strong>
+                <span style="font-size:14px;">${label}</span>
+                <strong style="font-size:16px;">${value}</strong>
             </div>`;
         },
 
@@ -651,34 +737,54 @@
                 ? majorWins.map(w => {
                     const name = Utils.escapeHTML(w.raceName);
                     const grade = (w.grade || '').trim();
+                    const displayName = grade ? `${name}(${grade})` : name;
+                    
                     if (grade === 'GI' || grade === 'JpnI') {
-                        return `<b>${name}</b>`;
+                        return `<b style="color:#d32f2f">${displayName}</b>`; // G1 wins highlighted red
                     }
-                    return name;
+                    return displayName;
                 }).join('、')
                 : '-';
 
             // 前走
             const latest = Utils.getLatestRace(races);
             const latestStr = latest
-                ? `${Utils.escapeHTML(latest.raceName)}(${Utils.escapeHTML(latest.result)})`
+                ? `${Utils.escapeHTML(latest.raceName)} <span style="font-weight:bold; color:${latest.result == 1 ? '#d32f2f' : 'inherit'}">(${Utils.escapeHTML(latest.result)})</span>`
                 : '-';
 
             return `
-            <div class="tt-block">
-                <div class="tt-block-title">通算成绩</div>
-                <div class="tt-block-body">
-                    <div>${stats.total}战${stats.wins}胜 ${recordStr}</div>
-                    <div style="margin-top: 4px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
-                        <div>胜率：${stats.winRate}</div>
-                        <div>连对率：${stats.quinellaRate}</div>
-                        <div>复胜率：${stats.placeRate}</div>
-                        <div>进板率：${stats.boardRate}</div>
+            <div class="tt-stats-card">
+                <div class="tt-stats-header">
+                    <span>${stats.total}战${stats.wins}胜</span>
+                    <span class="tt-stats-record">${recordStr}</span>
+                </div>
+                
+                <div class="tt-stats-grid">
+                    <div class="tt-stat-item">
+                        <span class="tt-stat-label">胜率</span>
+                        <span class="tt-stat-value">${stats.winRate}</span>
                     </div>
-                    <div style="margin-top: 6px;">
-                        <div>主胜鞍：${majorWinsStr}</div>
-                        <div style="margin-top: 2px;">前走：${latestStr}</div>
+                    <div class="tt-stat-item">
+                        <span class="tt-stat-label">连对率</span>
+                        <span class="tt-stat-value">${stats.quinellaRate}</span>
                     </div>
+                    <div class="tt-stat-item">
+                        <span class="tt-stat-label">复胜率</span>
+                        <span class="tt-stat-value">${stats.placeRate}</span>
+                    </div>
+                    <div class="tt-stat-item">
+                        <span class="tt-stat-label">进板率</span>
+                        <span class="tt-stat-value">${stats.boardRate}</span>
+                    </div>
+                </div>
+
+                <div class="tt-stat-row">
+                    <div class="tt-stat-row-label">主胜鞍</div>
+                    <div class="tt-stat-row-value">${majorWinsStr}</div>
+                </div>
+                <div class="tt-stat-row">
+                    <div class="tt-stat-row-label">前走</div>
+                    <div class="tt-stat-row-value">${latestStr}</div>
                 </div>
             </div>`;
         },
@@ -700,11 +806,14 @@
                 <div class="tt-grid">
                     ${this.row('性别', horse['性別'])}
                     ${this.row('毛色', horse['毛色'])}
-                    ${this.row('马主', horse['馬主'])}
-                    ${this.row('母马', horse['母名'])}
-                    ${this.row('母父', horse['母父名'])}
-                    ${this.row('牧场', horse['生产牧场'])}
                     ${this.row('调教师', horse['管理調教師'])}
+                    ${this.row('生产牧场', horse['生产牧场'])}
+                    ${this.row('母父', horse['母父名'])}
+                    ${this.row('母马', horse['母名'])}
+                    <div style="grid-column: span 2;">
+                        ${this.row('马主', horse['馬主'])}
+                    </div>
+                    
                     ${this.row('初出走', Utils.formatDate(horse['debutDate']))}
                     ${this.row('初胜利', Utils.formatDate(horse['winDate']))}
                     ${this.row('注册日', Utils.formatDate(horse['registerDate']))}
