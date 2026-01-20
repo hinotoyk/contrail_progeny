@@ -33,7 +33,8 @@
         RACE_SHEET_CACHE_KEY: 'sheet_race_cache',
         CACHE_EXPIRY: 24 * 60 * 60 * 1000, // 24小时
         SHEET_CACHE_EXPIRY: 10 * 60 * 1000, // 10分钟
-        ALPINE_URL: 'https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js'
+        ALPINE_URL: 'https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js',
+        GRADE_ORDER: ['GI', 'JpnI', 'GII', 'JpnII', 'GIII', 'JpnIII', 'L', 'OP', '']
     };
 
     /**
@@ -113,6 +114,56 @@
                 placeRate: formatRate(p1_3, total),
                 boardRate: formatRate(p1_5, total)
             };
+        },
+
+        calculateWins(races) {
+            if (!races || !races.length) return [];
+
+            // 筛选出所有获胜比赛（着顺为1）
+            const wins = races.filter(r => String(r.result).trim() === '1');
+            if (!wins.length) return [];
+
+            // 排序逻辑：格高者优先，同格日期新者优先
+            wins.sort((a, b) => {
+                const gradeA = (a.grade || '').trim();
+                const gradeB = (b.grade || '').trim();
+                
+                const idxA = Constants.GRADE_ORDER.indexOf(gradeA);
+                const idxB = Constants.GRADE_ORDER.indexOf(gradeB);
+
+                // 如果都不在列表中（未知等级），按字符串排序（或者都视为最低级）
+                // 这里假设不在列表中的等级排在列表之后
+                const rankA = idxA === -1 ? 999 : idxA;
+                const rankB = idxB === -1 ? 999 : idxB;
+
+                if (rankA !== rankB) {
+                    return rankA - rankB;
+                }
+
+                // 同等级，按日期倒序
+                return new Date(b.date) - new Date(a.date);
+            });
+
+            // 过滤逻辑：
+            // 如果所有胜鞍都是空白格（普通赛事），只保留最新的3个
+            // 如果有分级赛胜鞍，全部展示
+            
+            const hasGradedWin = wins.some(w => {
+                const g = (w.grade || '').trim();
+                return g && Constants.GRADE_ORDER.indexOf(g) !== -1 && Constants.GRADE_ORDER.indexOf(g) < 8; // index 8 is ''
+            });
+
+            if (!hasGradedWin) {
+                return wins.slice(0, 3);
+            }
+
+            return wins;
+        },
+
+        getLatestRace(races) {
+            if (!races || !races.length) return null;
+            // 假设 races 已经按日期倒序排列
+            return races[0];
         }
     };
 
@@ -594,6 +645,25 @@
             const p = stats.places;
             const recordStr = `[${p[0]}-${p[1]}-${p[2]}-${p[3]}-${p[4]}]`;
 
+            // 主胜鞍
+            const majorWins = Utils.calculateWins(races);
+            const majorWinsStr = majorWins.length > 0
+                ? majorWins.map(w => {
+                    const name = Utils.escapeHTML(w.raceName);
+                    const grade = (w.grade || '').trim();
+                    if (grade === 'GI' || grade === 'JpnI') {
+                        return `<b>${name}</b>`;
+                    }
+                    return name;
+                }).join('、')
+                : '-';
+
+            // 前走
+            const latest = Utils.getLatestRace(races);
+            const latestStr = latest
+                ? `${Utils.escapeHTML(latest.raceName)}(${Utils.escapeHTML(latest.result)})`
+                : '-';
+
             return `
             <div class="tt-block">
                 <div class="tt-block-title">通算成绩</div>
@@ -604,6 +674,10 @@
                         <div>连对率：${stats.quinellaRate}</div>
                         <div>复胜率：${stats.placeRate}</div>
                         <div>进板率：${stats.boardRate}</div>
+                    </div>
+                    <div style="margin-top: 6px;">
+                        <div>主胜鞍：${majorWinsStr}</div>
+                        <div style="margin-top: 2px;">前走：${latestStr}</div>
                     </div>
                 </div>
             </div>`;
