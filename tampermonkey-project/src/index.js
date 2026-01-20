@@ -25,7 +25,7 @@
      * 常量定义
      */
     const Constants = {
-        DATA_URL: `https://raw.githubusercontent.com/hinotoyk/contrail_progeny/refs/heads/main/tampermonkey-project/data/Contrail%27s%20Crops%20Progress%202023.json`,
+        DATA_URL: `https://raw.githubusercontent.com/hinotoyk/contrail_progeny/refs/heads/main/tampermonkey-project/data/ContrailCrops.json`,
         SHEET_URL: `https://docs.google.com/spreadsheets/d/1PPasJnqqBQy_cbhXLDJ0V11CTUDJs6UBtRwe-nsCNfc/export?format=csv&gid=0`,
         RACE_SHEET_URL: `https://docs.google.com/spreadsheets/d/1PPasJnqqBQy_cbhXLDJ0V11CTUDJs6UBtRwe-nsCNfc/export?format=csv&gid=1454271910`,
         CACHE_KEY: 'contrail_progeny_data',
@@ -85,7 +85,7 @@
                 // 解析着顺，可能是数字字符串，也可能是 "1(降)" 等
                 const resultStr = String(r.result).trim();
                 const rank = parseInt(resultStr, 10);
-                
+
                 // 只要有结果，就计入总场数（排除取消、中止等非数字情况，如果需要更严谨判断需调整）
                 if (!isNaN(rank)) {
                     total++;
@@ -127,7 +127,7 @@
             wins.sort((a, b) => {
                 const gradeA = (a.grade || '').trim();
                 const gradeB = (b.grade || '').trim();
-                
+
                 const idxA = Constants.GRADE_ORDER.indexOf(gradeA);
                 const idxB = Constants.GRADE_ORDER.indexOf(gradeB);
 
@@ -147,7 +147,7 @@
             // 过滤逻辑：
             // 如果所有胜鞍都是空白格（普通赛事），只保留最新的3个
             // 如果有分级赛胜鞍，全部展示
-            
+
             const hasOpOrHigherWin = wins.some(w => {
                 const g = (w.grade || '').trim();
                 // OP is index 7 in GRADE_ORDER
@@ -388,7 +388,7 @@
                 }
                 grouped.get(cleanName).push(item);
             });
-            
+
             // 按日期倒序排序
             grouped.forEach(races => {
                 races.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -411,7 +411,7 @@
                 const cleanName = horse['馬名'] ? horse['馬名'].trim() : '';
                 const sheetInfo = sheetMap.get(cleanName);
                 const races = raceMap ? raceMap.get(cleanName) : null;
-                
+
                 let combined = horse;
                 if (sheetInfo) {
                     combined = { ...combined, ...sheetInfo };
@@ -738,7 +738,7 @@
                     const name = Utils.escapeHTML(w.raceName);
                     const grade = (w.grade || '').trim();
                     const displayName = grade ? `${name}(${grade})` : name;
-                    
+
                     if (grade === 'GI' || grade === 'JpnI') {
                         return `<b style="color:#d32f2f">${displayName}</b>`; // G1 wins highlighted red
                     }
@@ -849,7 +849,7 @@
                     e.stopPropagation();
                 }
             };
-            
+
             // 注意：passive: false 是必须的，否则 preventDefault 无效
             tooltip.addEventListener('wheel', stopScrollPropagation, { passive: false });
 
@@ -942,7 +942,7 @@
 
                 // Simple check before iterating map
                 let found = false;
-                
+
                 // Convert Map keys to array for iteration to break early
                 for (const [name, horse] of map.entries()) {
                     if (text.includes(name)) {
@@ -967,7 +967,7 @@
                         if (node.parentNode) {
                             node.parentNode.replaceChild(span, node);
                         }
-                        
+
                         found = true;
                         break; // Only highlight first match per text node to avoid complexity
                     }
@@ -981,7 +981,7 @@
 
             // Initial processing
             this.processNodes(document.body, map);
-            
+
             // Setup observer for dynamic content
             this.setupMutationObserver(map);
         },
