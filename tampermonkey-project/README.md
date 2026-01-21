@@ -1,6 +1,8 @@
 # 云崽高亮器 (Contrail Progeny Highlighter)
 
-这是一个 Tampermonkey (油猴) 脚本，用于在各大赛马网站上自动高亮显示「铁鸟翱天 (Contrail/コントレイル)」的产驹，并提供详细的马匹信息展示。
+这是一个 Tampermonkey (油猴) 脚本，用于在各大赛马网站上自动高亮显示「铁鸟翱天 (Contrail/コントレイル)」的产驹，并提供详细的中文马匹信息展示。降低数据查看门槛
+
+![效果图](https://raw.githubusercontent.com/hinotoyk/contrail_progeny/refs/heads/main/tampermonkey-project/image/demo.png)
 
 ## ✨ 功能特点
 
@@ -8,10 +10,11 @@
 *   **信息展示**：提供悬浮窗展示马匹的详细资料，包括：
     *   **基本信息**：马名、性别、毛色、马主、生产牧场、调教师等。
     *   **血统信息**：母名、母父名。
+    *   **赛绩数据**：
+        *   **赏金显示**：自动格式化展示获得赏金及收得赏金（单位：万円/億円）。
+        *   **战绩统计**：胜率、连对率、复胜率及进板率统计。
+        *   **主胜鞍展示**：优化 OP 级以上赛事的展示（包含年份及等级标注）。
     *   **详细评价**：包含近况更新、牧场评价、血统分析及备考信息。
-*   **数据同步**：
-    *   脚本自动从 GitHub 获取最新的基础马匹数据（`ContrailCrops.json`）。
-    *   集成 Google Sheets 数据源，获取更实时的赛程和更新。
 
 ## 🌐 支持网站
 
@@ -27,31 +30,9 @@
 1.  请确保您的浏览器已安装 **Tampermonkey** 扩展。
 2.  点击此链接安装：[GreasyFork - 云崽高亮器](https://greasyfork.org/zh-CN/scripts/562746-%E4%BA%91%E5%B4%BD%E9%AB%98%E4%BA%AE%E5%99%A8)
 
-## 🛠️ 数据维护与开发
+## ⚠️ 免责声明
 
-本项目包含一个 Python 脚本，用于将本地 Excel 维护的马匹数据转换为脚本所需的 JSON 格式。
-
-### 1. 数据源
-数据主要在本地 Excel 文件中维护（如 `Contrail's Crops Progress 2023.xlsx`）。
-
-### 2. 数据转换脚本
-使用 [`tampermonkey-project/src/clean_excel_merged_cells_to_json.py`](tampermonkey-project/src/clean_excel_merged_cells_to_json.py) 将 Excel 数据转换为 JSON。
-
-**脚本功能：**
-*   读取配置的 Excel 文件源（支持多个年份/Sheet）。
-*   处理合并单元格（自动继承"马主"等字段）。
-*   清洗数据并生成 JSON 文件输出到 [`tampermonkey-project/data/ContrailCrops.json`](tampermonkey-project/data/ContrailCrops.json)。
-
-**运行环境依赖：**
-```bash
-pip install pandas openpyxl
-```
-
-## 📂 核心文件说明
-
-*   **`src/index.js`**: Tampermonkey 脚本源代码 (v2.0.0)。
-*   **`src/clean_excel_merged_cells_to_json.py`**: 数据处理脚本，负责将 Excel 转换为 JSON。
-*   **`data/ContrailCrops.json`**: 脚本读取的静态马匹数据文件。
+本项目所提供的数据及信息仅供分享与交流使用，**严禁用于任何形式的赌博或违法行为**。使用者应遵守相关法律法规，自行承担因使用本项目而产生的一切后果，作者不承担任何法律责任。
 
 ## 📝 许可证
 
