@@ -1,18 +1,16 @@
 // ==UserScript==
 // @name         云崽高亮器
 // @namespace    https://github.com/hinotoyk/contrail_progeny
-// @version      2.1.0
+// @version      2.2.0
 // @description  一键高亮云崽并展示相关数据
 // @author       hinotoyk
 // @license      CC BY-NC-SA 4.0
-// @match        https://www.jra.go.jp/*
-// @match        https://www.jbis.or.jp/*
-// @match        https://*.netkeiba.com/*
-// @match        https://www.keibanomiryoku.com/*
+// @match        *://*/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_registerMenuCommand
 // @connect      raw.githubusercontent.com
 // @connect      docs.google.com
 // @connect      googleusercontent.com
@@ -20,6 +18,10 @@
 
 (function () {
     'use strict';
+
+    if (window.top !== window.self) {
+        return;
+    }
 
     /**
      * Module: Constants
@@ -32,10 +34,18 @@
         CACHE_KEY: 'contrail_progeny_data',
         SHEET_CACHE_KEY: 'sheet_csv_cache',
         RACE_SHEET_CACHE_KEY: 'sheet_race_cache',
-        CACHE_EXPIRY: 24 * 60 * 60 * 1000, // 24小时
+        CACHE_EXPIRY: 1 * 60 * 60 * 1000, // 1小时
         SHEET_CACHE_EXPIRY: 10 * 60 * 1000, // 10分钟
         ALPINE_URL: 'https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js',
-        GRADE_ORDER: ['GI', 'JpnI', 'GII', 'JpnII', 'GIII', 'JpnIII', 'L', 'OP', '']
+        GRADE_ORDER: ['GI', 'JpnI', 'GII', 'JpnII', 'GIII', 'JpnIII', 'L', 'OP', ''],
+        SITE_STORAGE_KEY: 'contrail_progeny_sites',
+        SITE_STORAGE_VERSION: 1,
+        DEFAULT_SITES: [
+            { id: 'jra', label: 'JRA 官方网站', pattern: 'https://www.jra.go.jp/*', enabled: true, origin: 'default' },
+            { id: 'jbis', label: 'JBIS 官方数据库', pattern: 'https://www.jbis.or.jp/*', enabled: true, origin: 'default' },
+            { id: 'netkeiba', label: 'netkeiba', pattern: 'https://*.netkeiba.com/*', enabled: true, origin: 'default' },
+            { id: 'keibanomiryoku', label: '競馬の魅力', pattern: 'https://www.keibanomiryoku.com/*', enabled: true, origin: 'default' }
+        ]
     };
 
     /**
@@ -50,6 +60,29 @@
                 .replace(/>/g, '>')
                 .replace(/"/g, '"')
                 .replace(/'/g, '&#039;');
+        },
+
+        escapeRegExp(str) {
+            return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        },
+
+        matchWildcard(url, pattern) {
+            if (!pattern) return false;
+            const escaped = this.escapeRegExp(pattern).replace(/\\\*/g, '.*');
+            const regex = new RegExp(`^${escaped}$`, 'i');
+            return regex.test(url);
+        },
+
+        onDocumentReady(cb) {
+            if (document.readyState === 'loading') {
+                const once = () => {
+                    document.removeEventListener('DOMContentLoaded', once);
+                    cb();
+                };
+                document.addEventListener('DOMContentLoaded', once);
+            } else {
+                cb();
+            }
         },
 
         /**
@@ -207,6 +240,337 @@
             if (!races || !races.length) return null;
             // 假设 races 已经按日期倒序排列
             return races[0];
+        }
+    };
+
+    /**
+     * Module: SiteManager
+     * 支持站点动态管理
+     */
+    const SiteManager = {
+        sites: [],
+        onSiteEnabled: null,
+        init(options = {}) {
+            this.onSiteEnabled = options.onSiteEnabled || null;
+            this.sites = this.loadSites();
+            this.renderMenu();
+        },
+
+        loadSites() {
+            try {
+                const stored = GM_getValue(Constants.SITE_STORAGE_KEY, null);
+                if (stored && stored.version === Constants.SITE_STORAGE_VERSION && Array.isArray(stored.sites)) {
+                    return this.mergeDefaults(this.normalizeSites(stored.sites));
+                }
+            } catch (err) {
+                console.warn('Failed to load site configuration', err);
+            }
+            const defaults = this.normalizeSites(Constants.DEFAULT_SITES);
+            this.saveSites(defaults);
+            return defaults;
+        },
+
+        mergeDefaults(currentSites) {
+            const patternSet = new Set(currentSites.map(site => site.pattern));
+            Constants.DEFAULT_SITES.forEach(def => {
+                if (!patternSet.has(def.pattern)) {
+                    currentSites.push({ ...def });
+                }
+            });
+            return this.normalizeSites(currentSites);
+        },
+
+        normalizeSites(list) {
+            const usedIds = new Set();
+            return list.reduce((acc, site) => {
+                const pattern = (site.pattern || '').trim();
+                if (!pattern) return acc;
+
+                let id = site.id && !usedIds.has(site.id)
+                    ? site.id
+                    : this.makeIdFromPattern(pattern, usedIds);
+                usedIds.add(id);
+
+                acc.push({
+                    id,
+                    label: (site.label || pattern).trim(),
+                    pattern,
+                    enabled: site.enabled !== false,
+                    origin: site.origin || 'user'
+                });
+                return acc;
+            }, []);
+        },
+
+        makeIdFromPattern(pattern, usedIds) {
+            const base = pattern
+                .replace(/[^a-z0-9]+/gi, '_')
+                .replace(/^_+|_+$/g, '')
+                .toLowerCase() || 'site';
+            let candidate = base;
+            let idx = 1;
+            while (usedIds.has(candidate)) {
+                candidate = `${base}_${idx++}`;
+            }
+            usedIds.add(candidate);
+            return candidate;
+        },
+
+        saveSites(sites) {
+            GM_setValue(Constants.SITE_STORAGE_KEY, {
+                version: Constants.SITE_STORAGE_VERSION,
+                sites: this.normalizeSites(sites)
+            });
+        },
+
+        persist() {
+            this.sites = this.normalizeSites(this.sites);
+            this.saveSites(this.sites);
+        },
+
+        renderMenu() {
+            if (typeof GM_registerMenuCommand !== 'function') return;
+            GM_registerMenuCommand('Contrail · 添加当前站点', () => this.openSiteModal('add'));
+            GM_registerMenuCommand('Contrail · 管理站点列表', () => this.openSiteModal('manage'));
+        },
+
+        getActiveSites() {
+            return this.sites.filter(site => site.enabled);
+        },
+
+        isCurrentSiteEnabled() {
+            const href = window.location.href;
+            return this.getActiveSites().some(site => Utils.matchWildcard(href, site.pattern));
+        },
+
+        getTopLevelLocation() {
+            try {
+                const topLocation = window.top?.location;
+                if (topLocation) {
+                    return {
+                        origin: topLocation.origin,
+                        href: topLocation.href,
+                        hostname: topLocation.hostname
+                    };
+                }
+            } catch (err) {
+                // ignore cross-origin errors
+            }
+            return {
+                origin: window.location.origin,
+                href: window.location.href,
+                hostname: window.location.hostname
+            };
+        },
+
+        promptAddCurrentSite() {
+            const topLoc = this.getTopLevelLocation();
+            const defaultPattern = `${topLoc.origin}/*`;
+            return this.openSiteModal('add', {
+                pattern: defaultPattern,
+                label: document.title || topLoc.hostname || defaultPattern
+            });
+        },
+
+        openManagePrompt() {
+            this.openSiteModal('manage');
+        },
+
+        toggleSite(index) {
+            const site = this.sites[index];
+            if (!site) return;
+            this.sites[index] = { ...site, enabled: !site.enabled };
+            this.persist();
+
+            if (this.isCurrentSiteEnabled() && this.sites[index].enabled && this.onSiteEnabled) {
+                this.onSiteEnabled();
+            }
+        },
+
+        deleteSite(index) {
+            const site = this.sites[index];
+            if (!site) return;
+            if (site.origin === 'default') {
+                if (typeof alert === 'function') alert('默认站点不可删除，可通过切换禁用');
+                return;
+            }
+            this.sites.splice(index, 1);
+            this.persist();
+
+            if (this.isCurrentSiteEnabled() && this.onSiteEnabled) {
+                this.onSiteEnabled();
+            }
+        },
+        renderInactiveBanner() {},
+        removeInactiveBanner() {},
+
+        openSiteModal(mode, options = {}) {
+            const topLoc = this.getTopLevelLocation();
+            const overlay = document.createElement('div');
+            overlay.className = 'contrail-modal-overlay';
+
+            const modal = document.createElement('div');
+            modal.className = 'contrail-modal';
+
+            const closeModal = () => {
+                overlay.remove();
+            };
+
+            overlay.addEventListener('click', (event) => {
+                if (event.target === overlay) {
+                    closeModal();
+                }
+            });
+
+            const renderAdd = () => {
+                const patternValue = options.pattern || `${topLoc.origin}/*`;
+                const labelValue = options.label || document.title || topLoc.hostname || patternValue;
+
+                modal.innerHTML = `
+                    <div class="contrail-modal__header">
+                        <div class="contrail-modal__title">添加支持站点</div>
+                        <button class="contrail-modal__close" aria-label="关闭">×</button>
+                    </div>
+                    <div class="contrail-modal__body">
+                        <label class="contrail-modal__field">
+                            <span>地址匹配规则 <small>(支持 * 通配符)</small></span>
+                            <input type="text" class="contrail-modal__input" data-field="pattern" value="${patternValue}">
+                        </label>
+                        <label class="contrail-modal__field">
+                            <span>站点名称</span>
+                            <input type="text" class="contrail-modal__input" data-field="label" value="${labelValue}">
+                        </label>
+                    </div>
+                    <div class="contrail-modal__footer">
+                        <button class="contrail-btn contrail-btn--secondary" data-action="cancel">取消</button>
+                        <button class="contrail-btn contrail-btn--primary" data-action="submit">保存并启用</button>
+                    </div>
+                `;
+
+                modal.querySelector('[data-action="submit"]').addEventListener('click', () => {
+                    const pattern = modal.querySelector('[data-field="pattern"]').value.trim();
+                    const label = modal.querySelector('[data-field="label"]').value.trim() || pattern;
+
+                    if (!pattern) {
+                        alert('地址匹配规则不能为空');
+                        return;
+                    }
+
+                    const existingIndex = this.sites.findIndex(site => site.pattern === pattern);
+                    if (existingIndex !== -1) {
+                        this.sites[existingIndex] = {
+                            ...this.sites[existingIndex],
+                            label,
+                            pattern,
+                            enabled: true
+                        };
+                    } else {
+                        this.sites.push({
+                            id: null,
+                            label,
+                            pattern,
+                            enabled: true,
+                            origin: 'user'
+                        });
+                    }
+
+                    this.persist();
+                    closeModal();
+
+                    if (this.onSiteEnabled && this.isCurrentSiteEnabled()) {
+                        this.onSiteEnabled();
+                    }
+
+                    alert('站点已保存并启用');
+                });
+            };
+
+            const renderManage = () => {
+                if (!this.sites.length) {
+                    modal.innerHTML = `
+                        <div class="contrail-modal__header">
+                            <div class="contrail-modal__title">管理支持站点</div>
+                            <button class="contrail-modal__close" aria-label="关闭">×</button>
+                        </div>
+                        <div class="contrail-modal__body">
+                            <div class="contrail-empty">尚未配置任何站点</div>
+                        </div>
+                        <div class="contrail-modal__footer">
+                            <button class="contrail-btn contrail-btn--secondary" data-action="close">关闭</button>
+                        </div>
+                    `;
+                    return;
+                }
+
+                const listHtml = this.sites.map((site, idx) => {
+                    const statusClass = site.enabled ? 'is-enabled' : 'is-disabled';
+                    const toggleLabel = site.enabled ? '已启用' : '已禁用';
+                    const badge = site.origin === 'default' ? '<span class="contrail-tag">默认</span>' : '';
+                    const deleteDisabled = site.origin === 'default' ? 'disabled' : '';
+
+                    return `
+                        <div class="contrail-site-item ${statusClass}" data-index="${idx}">
+                            <div class="contrail-site-item__info">
+                                <div class="contrail-site-item__title">${Utils.escapeHTML(site.label)} ${badge}</div>
+                                <div class="contrail-site-item__url">${Utils.escapeHTML(site.pattern)}</div>
+                            </div>
+                            <div class="contrail-site-item__buttons">
+                                <button class="contrail-btn contrail-btn--ghost" data-action="toggle">${toggleLabel}</button>
+                                <button class="contrail-btn contrail-btn--danger" data-action="delete" ${deleteDisabled}>删除</button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                modal.innerHTML = `
+                    <div class="contrail-modal__header">
+                        <div class="contrail-modal__title">管理支持站点</div>
+                        <button class="contrail-modal__close" aria-label="关闭">×</button>
+                    </div>
+                    <div class="contrail-modal__body">
+                        <div class="contrail-site-list">${listHtml}</div>
+                    </div>
+                    <div class="contrail-modal__footer">
+                        <button class="contrail-btn contrail-btn--secondary" data-action="close">关闭</button>
+                    </div>
+                `;
+
+                modal.querySelectorAll('.contrail-site-item').forEach(item => {
+                    const index = Number(item.getAttribute('data-index'));
+                    const toggleBtn = item.querySelector('[data-action="toggle"]');
+                    const deleteBtn = item.querySelector('[data-action="delete"]');
+
+                    toggleBtn.addEventListener('click', () => {
+                        this.toggleSite(index);
+                        closeModal();
+                        this.openSiteModal('manage');
+                    });
+
+                    if (deleteBtn && !deleteBtn.disabled) {
+                        deleteBtn.addEventListener('click', () => {
+                            if (!confirm('确定删除该站点吗？')) return;
+                            this.deleteSite(index);
+                            closeModal();
+                            this.openSiteModal('manage');
+                        });
+                    }
+                });
+            };
+
+            if (mode === 'add') {
+                renderAdd();
+            } else {
+                renderManage();
+            }
+
+            modal.querySelectorAll('.contrail-modal__close, [data-action="cancel"], [data-action="close"]').forEach(btn => {
+                btn.addEventListener('click', closeModal);
+            });
+
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+
+            return true;
         }
     };
 
@@ -495,6 +859,240 @@
                     --contrail-highlight-text: #ff88a6;
                     --contrail-shadow: rgba(0,0,0,.5);
                 }
+            }
+
+            .contrail-modal-overlay {
+                position: fixed;
+                inset: 0;
+                background: rgba(0, 0, 0, 0.35);
+                backdrop-filter: blur(2px);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 2147483646;
+                padding: 24px;
+            }
+
+            .contrail-modal {
+                width: min(480px, calc(100vw - 48px));
+                max-height: min(620px, calc(100vh - 48px));
+                background: var(--contrail-bg);
+                color: var(--contrail-text);
+                border-radius: 16px;
+                box-shadow: 0 24px 64px rgba(0, 0, 0, 0.25);
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                font-family: var(--contrail-font-family);
+                border: 1px solid var(--contrail-border);
+                animation: contrail-modal-in 0.18s ease-out;
+            }
+
+            @keyframes contrail-modal-in {
+                from { transform: translateY(16px) scale(0.98); opacity: 0; }
+                to   { transform: translateY(0) scale(1); opacity: 1; }
+            }
+
+            .contrail-modal__header,
+            .contrail-modal__footer {
+                padding: 16px 20px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                background: rgba(0,0,0,0.02);
+            }
+
+            .contrail-modal__header {
+                border-bottom: 1px solid var(--contrail-border);
+            }
+
+            .contrail-modal__footer {
+                border-top: 1px solid var(--contrail-border);
+                justify-content: flex-end;
+            }
+
+            .contrail-modal__body {
+                padding: 20px;
+                overflow-y: auto;
+                max-height: 100%;
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+            }
+
+            .contrail-modal__title {
+                font-size: 18px;
+                font-weight: 600;
+                color: var(--contrail-highlight-text);
+            }
+
+            .contrail-modal__close {
+                border: none;
+                background: transparent;
+                color: var(--contrail-text-secondary);
+                font-size: 20px;
+                cursor: pointer;
+                transition: color 0.2s ease;
+            }
+
+            .contrail-modal__close:hover {
+                color: var(--contrail-highlight-text);
+            }
+
+            .contrail-modal__field {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                font-size: 14px;
+                color: var(--contrail-text-secondary);
+            }
+
+            .contrail-modal__field span {
+                display: flex;
+                align-items: baseline;
+                justify-content: space-between;
+                font-weight: 600;
+                color: var(--contrail-text);
+            }
+
+            .contrail-modal__field small {
+                font-weight: normal;
+                color: var(--contrail-text-secondary);
+                font-size: 12px;
+            }
+
+            .contrail-modal__input {
+                padding: 10px 12px;
+                border-radius: 10px;
+                border: 1px solid var(--contrail-border);
+                background: rgba(255,255,255,0.9);
+                color: var(--contrail-text);
+                font-size: 14px;
+                transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            }
+
+            .contrail-modal__input:focus {
+                outline: none;
+                border-color: var(--contrail-highlight-text);
+                box-shadow: 0 0 0 2px rgba(255,136,166,0.25);
+            }
+
+            .contrail-btn {
+                border: none;
+                border-radius: 999px;
+                padding: 8px 18px;
+                font-size: 14px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.2s ease;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                color: inherit;
+            }
+
+            .contrail-btn:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+                box-shadow: none;
+                transform: none;
+            }
+
+            .contrail-btn:not(:disabled):hover {
+                transform: translateY(-1px);
+                box-shadow: 0 6px 12px rgba(0,0,0,0.12);
+            }
+
+            .contrail-btn--primary {
+                background: linear-gradient(135deg, var(--contrail-highlight-bg), rgba(255,136,166,0.65));
+                color: var(--contrail-highlight-text);
+                border: 1px solid rgba(255,136,166,0.4);
+            }
+
+            .contrail-btn--secondary {
+                background: rgba(0,0,0,0.05);
+                border: 1px solid var(--contrail-border);
+                color: var(--contrail-text);
+            }
+
+            .contrail-btn--ghost {
+                background: transparent;
+                border: 1px solid var(--contrail-border);
+                color: var(--contrail-text);
+            }
+
+            .contrail-btn--danger {
+                background: rgba(255, 82, 82, 0.12);
+                border: 1px solid rgba(255, 82, 82, 0.4);
+                color: #d32f2f;
+            }
+
+            .contrail-site-list {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .contrail-site-item {
+                border: 1px solid var(--contrail-border);
+                border-radius: 12px;
+                padding: 12px 16px;
+                display: flex;
+                gap: 16px;
+                align-items: center;
+                justify-content: space-between;
+                background: rgba(0,0,0,0.02);
+                transition: border-color 0.2s ease, background 0.2s ease;
+            }
+
+            .contrail-site-item.is-enabled {
+                border-color: rgba(255,136,166,0.45);
+                background: rgba(255,136,166,0.08);
+            }
+
+            .contrail-site-item__info {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                min-width: 0;
+            }
+
+            .contrail-site-item__title {
+                font-weight: 600;
+                font-size: 15px;
+                color: var(--contrail-text);
+            }
+
+            .contrail-site-item__url {
+                font-size: 13px;
+                color: var(--contrail-text-secondary);
+                word-break: break-all;
+            }
+
+            .contrail-site-item__buttons {
+                display: flex;
+                gap: 8px;
+                flex-shrink: 0;
+            }
+
+            .contrail-tag {
+                display: inline-block;
+                padding: 2px 8px;
+                margin-left: 8px;
+                border-radius: 999px;
+                background: rgba(0,0,0,0.08);
+                color: var(--contrail-text-secondary);
+                font-size: 12px;
+                font-weight: 600;
+            }
+
+            .contrail-empty {
+                text-align: center;
+                color: var(--contrail-text-secondary);
+                padding: 24px 0;
+                font-size: 14px;
             }
 
             .horse-highlight,
@@ -944,39 +1542,80 @@
      * 主程序逻辑
      */
     const App = {
+        loading: false,
+        dataCache: null,
+        mapCache: null,
+        observer: null,
+
         init() {
             Styles.inject();
+            SiteManager.init({
+                onSiteEnabled: () => this.enableForCurrentSite()
+            });
+
+            if (SiteManager.isCurrentSiteEnabled()) {
+                this.enableForCurrentSite();
+            }
+        },
+
+        enableForCurrentSite() {
+            if (this.loading) return;
+
+            if (this.dataCache) {
+                this.highlight(this.dataCache);
+                return;
+            }
+
+            this.loading = true;
             Utils.loadAlpine(async () => {
                 try {
                     const data = await DataManager.getData();
+                    this.dataCache = data;
                     this.highlight(data);
                 } catch (err) {
                     console.error('Failed to load horse data:', err);
+                } finally {
+                    this.loading = false;
                 }
             });
         },
 
-        setupMutationObserver(map) {
-            const observer = new MutationObserver((mutations) => {
-                let shouldProcess = false;
-                for (const mutation of mutations) {
-                    if (mutation.addedNodes.length > 0) {
-                        shouldProcess = true;
-                        break;
+        setupMutationObserver() {
+            if (this.observer) return;
+
+            const initObserver = () => {
+                if (this.observer || !document.body) return;
+
+                this.observer = new MutationObserver((mutations) => {
+                    let shouldProcess = false;
+                    for (const mutation of mutations) {
+                        if (mutation.addedNodes.length > 0) {
+                            shouldProcess = true;
+                            break;
+                        }
                     }
-                }
-                if (shouldProcess) {
-                    this.processNodes(document.body, map);
-                }
-            });
+                    if (shouldProcess) {
+                        this.processNodes(document.body);
+                    }
+                });
 
-            observer.observe(document.body, {
-                childList: true,
-                subtree: true
-            });
+                this.observer.observe(document.body, {
+                    childList: true,
+                    subtree: true
+                });
+            };
+
+            if (document.body) {
+                initObserver();
+            } else {
+                Utils.onDocumentReady(initObserver);
+            }
         },
 
-        processNodes(rootNode, map) {
+        processNodes(rootNode) {
+            const map = this.mapCache;
+            if (!map || !map.size || !rootNode) return;
+
             const walker = document.createTreeWalker(
                 rootNode,
                 NodeFilter.SHOW_TEXT,
@@ -1037,14 +1676,27 @@
         },
 
         highlight(horses) {
+            if (!SiteManager.isCurrentSiteEnabled()) {
+                return;
+            }
+
+            if (!Array.isArray(horses) || !horses.length) return;
+
             const map = new Map();
-            horses.forEach(h => h['馬名'] && map.set(h['馬名'], h));
+            horses.forEach(h => h && h['馬名'] && map.set(h['馬名'], h));
+            this.mapCache = map;
 
-            // Initial processing
-            this.processNodes(document.body, map);
+            const process = () => {
+                if (!document.body) return;
+                this.processNodes(document.body);
+                this.setupMutationObserver();
+            };
 
-            // Setup observer for dynamic content
-            this.setupMutationObserver(map);
+            if (document.body) {
+                process();
+            } else {
+                Utils.onDocumentReady(process);
+            }
         },
 
         attachTooltipEvents(targetSpan, tooltip) {
