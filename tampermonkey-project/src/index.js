@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         云崽高亮器
 // @namespace    https://github.com/hinotoyk/contrail_progeny
-// @version      2.2.0
+// @version      2.3.0
 // @description  一键高亮云崽并展示相关数据
 // @author       hinotoyk
 // @license      CC BY-NC-SA 4.0
@@ -1645,7 +1645,12 @@
 
                 // Convert Map keys to array for iteration to break early
                 for (const [name, horse] of map.entries()) {
-                    if (text.includes(name)) {
+                    const index = text.indexOf(name);
+                    if (index !== -1) {
+                        // Split text node to isolate the matching part
+                        const matchNode = node.splitText(index);
+                        matchNode.splitText(name.length);
+
                         // 高亮文本生成
                         const translation = horse['港译'] || horse['译名'];
                         const highlightedName = translation
@@ -1664,8 +1669,8 @@
                         // Tooltip 交互逻辑
                         this.attachTooltipEvents(span, tooltip);
 
-                        if (node.parentNode) {
-                            node.parentNode.replaceChild(span, node);
+                        if (matchNode.parentNode) {
+                            matchNode.parentNode.replaceChild(span, matchNode);
                         }
 
                         found = true;
