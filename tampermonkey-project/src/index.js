@@ -156,28 +156,23 @@
         calculateStats(races) {
             if (!races || !races.length) return null;
 
-            let wins = 0;
-            const places = [0, 0, 0, 0, 0]; // 1st, 2nd, 3rd, 4th, 5th
             let total = 0;
+            let first = 0, second = 0, third = 0, unplaced = 0;
 
             races.forEach(r => {
                 // 解析着顺，可能是数字字符串，也可能是 "1(降)" 等
                 const resultStr = String(r.result).trim();
                 const rank = parseInt(resultStr, 10);
 
-                // 只要有结果，就计入总场数（排除取消、中止等非数字情况，如果需要更严谨判断需调整）
+                // 只要有结果，就计入总场数（排除取消、中止等非数字情况）
                 if (!isNaN(rank)) {
                     total++;
-                    if (rank >= 1 && rank <= 5) {
-                        places[rank - 1]++;
-                    }
+                    if (rank === 1) first++;
+                    else if (rank === 2) second++;
+                    else if (rank === 3) third++;
+                    else unplaced++;
                 }
             });
-
-            wins = places[0];
-            const p1_2 = places[0] + places[1]; // 连对 (前2)
-            const p1_3 = p1_2 + places[2];      // 复胜 (前3)
-            const p1_5 = p1_3 + places[3] + places[4]; // 进板 (前5)
 
             const formatRate = (num, den) => {
                 if (den === 0) return '0%';
@@ -186,12 +181,15 @@
 
             return {
                 total,
-                wins,
-                places,
-                winRate: formatRate(wins, total),
-                quinellaRate: formatRate(p1_2, total),
-                placeRate: formatRate(p1_3, total),
-                boardRate: formatRate(p1_5, total)
+                wins: first,
+                first,
+                second,
+                third,
+                unplaced,
+                winRate: formatRate(first, total),
+                quinellaRate: formatRate(first + second, total),
+                placeRate: formatRate(first + second + third, total),
+                boardRate: formatRate(total - unplaced, total)  // 进板率 = 前3 / 总数（与复胜率一致）
             };
         },
 
@@ -1448,8 +1446,7 @@
             const stats = Utils.calculateStats(races);
             if (!stats) return '';
 
-            const p = stats.places;
-            const recordStr = `[${p[0]}-${p[1]}-${p[2]}-${p[3]}-${p[4]}]`;
+            const recordStr = `[${stats.total}-${stats.first}-${stats.second}-${stats.third}-${stats.unplaced}]`;
 
             // 主胜鞍
             const majorWins = Utils.calculateWins(races);
