@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         云崽高亮器
 // @namespace    https://github.com/hinotoyk/contrail_progeny
-// @version      2.3.0
+// @version      3.0.0
 // @description  一键高亮云崽并展示相关数据
 // @author       hinotoyk
 // @license      CC BY-NC-SA 4.0
@@ -11,7 +11,6 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_registerMenuCommand
-// @connect      raw.githubusercontent.com
 // @connect      docs.google.com
 // @connect      googleusercontent.com
 // ==/UserScript==
@@ -28,14 +27,24 @@
      * 常量定义
      */
     const Constants = {
-        DATA_URL: `https://raw.githubusercontent.com/hinotoyk/contrail_progeny/refs/heads/main/tampermonkey-project/data/ContrailCrops.json`,
+        // 主数据源：Google Sheets（按年份管理的 sheet）
+        MAIN_SHEET_ID: '1lUlndcCVPly7dV13LswGZKlaMu145XBVGxl4hXIkfus',
+        MAIN_SHEETS: [
+            { gid: '35201753', source: '2023', label: '2023年生（2025年2岁）' },
+            { gid: '2033113937', source: '2024', label: '2024年生（2026年2岁）' }
+        ],
+        // 辅助数据源：赛绩 & 登录信息
         SHEET_URL: `https://docs.google.com/spreadsheets/d/1PPasJnqqBQy_cbhXLDJ0V11CTUDJs6UBtRwe-nsCNfc/export?format=csv&gid=0`,
         RACE_SHEET_URL: `https://docs.google.com/spreadsheets/d/1PPasJnqqBQy_cbhXLDJ0V11CTUDJs6UBtRwe-nsCNfc/export?format=csv&gid=1454271910`,
         CACHE_KEY: 'contrail_progeny_data',
         SHEET_CACHE_KEY: 'sheet_csv_cache',
         RACE_SHEET_CACHE_KEY: 'sheet_race_cache',
-        CACHE_EXPIRY: 1 * 60 * 60 * 1000, // 1小时
+        CACHE_EXPIRY: 30 * 60 * 1000, // 30分钟（主数据来自 Google Sheets，缩短缓存时间）
         SHEET_CACHE_EXPIRY: 10 * 60 * 1000, // 10分钟
+        // 列名别名映射（兼容不同 sheet 的列名差异）
+        COLUMN_ALIASES: {
+            '血统评价': '血统分析'
+        },
         ALPINE_URL: 'https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js',
         GRADE_ORDER: ['GI', 'JpnI', 'GII', 'JpnII', 'GIII', 'JpnIII', 'L', 'OP', ''],
         SITE_STORAGE_KEY: 'contrail_progeny_sites',
@@ -677,29 +686,102 @@
     /**
      * Module: DataManager
      * 数据管理与缓存
+     * 主数据源：Google Sheets（按年份管理的多个 sheet）
+     * 辅助数据源：赛绩 & 登录信息 Google Sheets
      */
     const DataManager = {
-        async fetchAndCache() {
+        /**
+         * 构建指定 sheet 的 CSV 导出 URL
+         */
+        buildSheetUrl(gid) {
+            return `https://docs.google.com/spreadsheets/d/${Constants.MAIN_SHEET_ID}/export?format=csv&gid=${gid}`;
+        },
+
+        /**
+         * 从 Google Sheets CSV 获取单个 sheet 的数据
+         * @param {{ gid: string, source: string, label: string }} sheetConfig
+         * @returns {Promise<Array<Object>>}
+         */
+        async fetchSheetData(sheetConfig) {
+            const url = this.buildSheetUrl(sheetConfig.gid);
+            const cacheKey = `main_sheet_${sheetConfig.source}`;
+
             return new Promise((resolve, reject) => {
+                const cache = GM_getValue(cacheKey, null);
+                const cacheTime = GM_getValue(cacheKey + '_time', 0);
+
+                if (cache && Date.now() - cacheTime < Constants.CACHE_EXPIRY) {
+                    console.log(`[主数据] 使用缓存: ${sheetConfig.label}`);
+                    resolve(cache);
+                    return;
+                }
+
+                console.log(`[主数据] 正在获取: ${sheetConfig.label}`);
                 GM_xmlhttpRequest({
                     method: 'GET',
-                    url: Constants.DATA_URL,
-                    onload: (res) => {
-                        if (res.status === 200) {
-                            try {
-                                const data = JSON.parse(res.responseText);
-                                this.saveCache(data);
-                                resolve(data);
-                            } catch (e) {
-                                reject(e);
+                    url,
+                    onload: res => {
+                        try {
+                            const rows = CSVUtils.parse(res.responseText);
+                            if (!rows.length) {
+                                resolve(cache || []);
+                                return;
                             }
-                        } else {
-                            reject(new Error(`Failed to fetch data: ${res.status}`));
+
+                            const headers = rows[0];
+                            const records = rows.slice(1)
+                                .filter(cols => cols.some(c => c && c.trim()))  // 跳过空行
+                                .map(cols => {
+                                    const record = {};
+                                    headers.forEach((h, i) => {
+                                        if (!h) return;
+                                        // 应用列名别名映射
+                                        const normalizedKey = Constants.COLUMN_ALIASES[h] || h;
+                                        record[normalizedKey] = cols[i] ?? '';
+                                    });
+                                    // 标记数据来源（年份）
+                                    record['_source'] = sheetConfig.source;
+                                    return record;
+                                })
+                                .filter(r => r['馬名'] && r['馬名'].trim()); // 必须有马名
+
+                            GM_setValue(cacheKey, records);
+                            GM_setValue(cacheKey + '_time', Date.now());
+
+                            console.log(`[主数据] ${sheetConfig.label}: ${records.length} 条记录`);
+                            resolve(records);
+                        } catch (e) {
+                            console.error(`[主数据] 解析失败: ${sheetConfig.label}`, e);
+                            if (cache) resolve(cache);
+                            else reject(e);
                         }
                     },
-                    onerror: reject
+                    onerror: err => {
+                        console.error(`[主数据] 请求失败: ${sheetConfig.label}`, err);
+                        if (cache) resolve(cache);
+                        else reject(err);
+                    }
                 });
             });
+        },
+
+        /**
+         * 并行获取所有年份 sheet 的主数据，合并为一个数组
+         */
+        async fetchAllMainData() {
+            const promises = Constants.MAIN_SHEETS.map(cfg => this.fetchSheetData(cfg));
+            const results = await Promise.allSettled(promises);
+
+            const allRecords = [];
+            results.forEach((result, i) => {
+                if (result.status === 'fulfilled') {
+                    allRecords.push(...result.value);
+                } else {
+                    console.error(`[主数据] Sheet ${Constants.MAIN_SHEETS[i].label} 加载失败:`, result.reason);
+                }
+            });
+
+            return allRecords;
         },
 
         getCache() {
@@ -707,10 +789,8 @@
             if (!cached) return null;
 
             try {
-                // 如果是旧版本的非JSON字符串或者是对象，需要兼容处理
-                // 这里假设存入的是 { timestamp: number, data: any }
                 if (Date.now() - cached.timestamp < Constants.CACHE_EXPIRY) {
-                    console.log('Using cached data');
+                    console.log('[主数据] 使用聚合缓存');
                     return cached.data;
                 }
             } catch (e) {
@@ -728,7 +808,7 @@
 
         async getData() {
             try {
-                // 并行获取主数据和Sheet数据
+                // 并行获取主数据和辅助 Sheet 数据
                 const [mainData, sheetData, raceData] = await Promise.all([
                     this.getMainData(),
                     this.getSheetData(),
@@ -736,18 +816,21 @@
                 ]);
 
                 // 合并数据
-                return this.mergeData(mainData, sheetData, raceData);
+                const merged = this.mergeData(mainData, sheetData, raceData);
+                this.saveCache(merged);
+                return merged;
             } catch (err) {
                 console.error('Data loading error:', err);
-                // 降级：如果部分失败，尝试返回已有数据
+                // 降级：尝试返回聚合缓存
+                const cached = this.getCache();
+                if (cached) return cached;
+                // 最终降级：只返回主数据
                 return await this.getMainData();
             }
         },
 
         async getMainData() {
-            const cachedData = this.getCache();
-            if (cachedData) return cachedData;
-            return this.fetchAndCache();
+            return this.fetchAllMainData();
         },
 
         async getSheetData() {
