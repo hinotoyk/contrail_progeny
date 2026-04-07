@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         云崽高亮器
 // @namespace    https://github.com/hinotoyk/contrail_progeny
-// @version      3.0.0
+// @version      3.1.0
 // @description  一键高亮云崽并展示相关数据
 // @author       hinotoyk
 // @license      CC BY-NC-SA 4.0
@@ -587,6 +587,10 @@
      */
     const CSVUtils = {
         parse(text) {
+            // 去除 BOM 字符
+            if (text.charCodeAt(0) === 0xFEFF) {
+                text = text.slice(1);
+            }
             const rows = [];
             let row = [];
             let cell = '';
@@ -621,6 +625,10 @@
                 rows.push(row);
             }
 
+            // trim 所有表头（第一行），避免不可见字符干扰字段匹配
+            if (rows.length > 0) {
+                rows[0] = rows[0].map(h => h.trim());
+            }
             return rows;
         },
 
@@ -861,6 +869,16 @@
                 cacheKey: Constants.RACE_SHEET_CACHE_KEY,
                 cacheTTL: Constants.SHEET_CACHE_EXPIRY
             });
+
+            console.log('[赛绩] rawData 条数:', rawData.length);
+            if (rawData.length > 0) {
+                console.log('[赛绩] 第一条数据样本:', JSON.stringify(rawData[0]));
+                const nullCount = rawData.filter(d => !d.horseName).length;
+                if (nullCount > 0) {
+                    console.warn(`[赛绩] ${nullCount}/${rawData.length} 条 horseName 为空，可能是列名不匹配`);
+                }
+            }
+
             // 按马名分组
             const grouped = new Map();
             rawData.forEach(item => {
@@ -872,6 +890,9 @@
                 }
                 grouped.get(cleanName).push(item);
             });
+
+            console.log('[赛绩] 分组后马匹数:', grouped.size,
+                '样本马名:', [...grouped.keys()].slice(0, 5));
 
             // 按日期倒序排序
             grouped.forEach(races => {
@@ -891,10 +912,13 @@
                 });
             }
 
+            let raceMatchCount = 0;
             const merged = mainList.map(horse => {
                 const cleanName = horse['馬名'] ? horse['馬名'].trim() : '';
                 const sheetInfo = sheetMap.get(cleanName);
                 const races = raceMap ? raceMap.get(cleanName) : null;
+
+                if (races) raceMatchCount++;
 
                 let combined = horse;
                 if (sheetInfo) {
@@ -905,6 +929,14 @@
                 }
                 return combined;
             });
+
+            console.log(`[合并] 主数据: ${mainList.length}, 辅助匹配: ${sheetMap.size}, 赛绩匹配: ${raceMatchCount}/${mainList.length}`);
+            if (raceMap && raceMatchCount === 0 && raceMap.size > 0) {
+                const mainNames = mainList.slice(0, 3).map(h => h['馬名']);
+                const raceNames = [...raceMap.keys()].slice(0, 3);
+                console.warn('[合并] 赛绩0匹配! 主数据马名样本:', mainNames, '赛绩马名样本:', raceNames);
+            }
+
             return merged;
         }
     };
@@ -1184,11 +1216,12 @@
             }
 
             .horse-highlight {
-                background: linear-gradient(transparent 60%, var(--contrail-highlight-bg) 60%);
+                background: none !important;
                 color: var(--contrail-highlight-text);
                 font-weight: 600;
                 cursor: pointer;
                 position: relative;
+                text-decoration: none !important;
             }
 
             .horse-tooltip {
@@ -1446,7 +1479,7 @@
             const stats = Utils.calculateStats(races);
             if (!stats) return '';
 
-            const recordStr = `[${stats.total}-${stats.first}-${stats.second}-${stats.third}-${stats.unplaced}]`;
+            const recordStr = `[${stats.first}-${stats.second}-${stats.third}-${stats.unplaced}]`;
 
             // 主胜鞍
             const majorWins = Utils.calculateWins(races);
