@@ -157,7 +157,7 @@
             if (!races || !races.length) return null;
 
             let total = 0;
-            let first = 0, second = 0, third = 0, unplaced = 0;
+            let first = 0, second = 0, third = 0, fourth = 0, fifth = 0, unplaced = 0;
 
             races.forEach(r => {
                 // 解析着顺，可能是数字字符串，也可能是 "1(降)" 等
@@ -170,6 +170,8 @@
                     if (rank === 1) first++;
                     else if (rank === 2) second++;
                     else if (rank === 3) third++;
+                    else if (rank === 4) fourth++;
+                    else if (rank === 5) fifth++;
                     else unplaced++;
                 }
             });
@@ -178,6 +180,8 @@
                 if (den === 0) return '0%';
                 return Math.round((num / den) * 100) + '%';
             };
+
+            const topFive = first + second + third + fourth + fifth;
 
             return {
                 total,
@@ -189,7 +193,7 @@
                 winRate: formatRate(first, total),
                 quinellaRate: formatRate(first + second, total),
                 placeRate: formatRate(first + second + third, total),
-                boardRate: formatRate(total - unplaced, total)  // 进板率 = 前3 / 总数（与复胜率一致）
+                boardRate: formatRate(topFive, total)  // 进板率 = 前5名 / 总数
             };
         },
 
@@ -1127,9 +1131,9 @@
             }
 
             .contrail-btn--primary {
-                background: linear-gradient(135deg, var(--contrail-highlight-bg), rgba(255,136,166,0.65));
-                color: var(--contrail-highlight-text);
-                border: 1px solid rgba(255,136,166,0.4);
+                background: rgba(255, 136, 166, 0.15);
+                color: #ff88a6;
+                border: 1px solid rgba(255, 136, 166, 0.4);
             }
 
             .contrail-btn--secondary {
