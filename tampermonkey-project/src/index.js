@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         云崽高亮器
 // @namespace    https://github.com/hinotoyk/contrail_progeny
-// @version      3.1.0
+// @version      3.2.0
 // @description  一键高亮云崽并展示相关数据
 // @author       hinotoyk
 // @license      CC BY-NC-SA 4.0
@@ -953,12 +953,16 @@
                 /* Light Mode Variables */
                 --contrail-bg: #faf7f2;
                 --contrail-text: #333;
-                --contrail-text-secondary: #666;
-                --contrail-border: #ddd;
+                --contrail-text-secondary: #888;
+                --contrail-border: #e8e3dc;
                 --contrail-link: #318cfa;
                 --contrail-highlight-bg: #ffd6d6;
-                --contrail-highlight-text: rgb(255, 136, 166);
+                --contrail-highlight-text: #ff88a6;
                 --contrail-shadow: rgba(0,0,0,.25);
+                --contrail-accent: #ff88a6;
+                --contrail-accent-light: rgba(255, 136, 166, 0.1);
+                --contrail-accent-lighter: rgba(255, 136, 166, 0.04);
+                --contrail-th-bg: #f5f0ea;
             }
 
             @media (prefers-color-scheme: dark) {
@@ -971,6 +975,10 @@
                     --contrail-highlight-bg: #4a2c2c;
                     --contrail-highlight-text: #ff88a6;
                     --contrail-shadow: rgba(0,0,0,.5);
+                    --contrail-accent: #ff88a6;
+                    --contrail-accent-light: rgba(255, 136, 166, 0.1);
+                    --contrail-accent-lighter: rgba(255, 136, 166, 0.04);
+                    --contrail-th-bg: #3a3a3a;
                 }
             }
 
@@ -1228,20 +1236,20 @@
                 position: fixed;
                 top: 0;
                 left: 0;
-                width: 490px;
+                width: 520px;
                 max-height: 80vh;
                 overflow-y: auto;
                 background: var(--contrail-bg);
                 color: var(--contrail-text);
-                border-radius: 12px;
-                padding: 16px;
-                box-shadow: 0 15px 40px var(--contrail-shadow);
+                border-radius: 14px;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);
                 z-index: 2147483647;
-                font-size: 15px;
-                line-height: 1.5;
+                font-size: 14px;
+                line-height: 1.6;
                 pointer-events: auto;
                 text-align: left;
                 overscroll-behavior: contain;
+                overflow: hidden;
                 
                 /* Animation Initial State */
                 opacity: 0;
@@ -1255,182 +1263,226 @@
                 opacity: 1;
                 transform: scale(1);
                 pointer-events: auto;
+                overflow-y: auto;
             }
 
+            /* Header */
             .tt-header {
-                border-bottom: 1px solid var(--contrail-border);
-                margin-bottom: 10px;
+                padding: 16px 20px 12px;
+                border-bottom: 2px solid var(--contrail-accent);
+                background: linear-gradient(135deg, var(--contrail-accent-lighter), transparent);
             }
 
             .tt-name {
                 font-size: 20px;
-                font-weight: bold;
-                color: var(--contrail-highlight-text);
+                font-weight: 700;
+                color: var(--contrail-accent);
+                letter-spacing: 0.3px;
             }
 
             .tt-sub {
+                font-size: 12px;
+                color: var(--contrail-text-secondary);
+                margin-top: 2px;
+            }
+
+            /* Info Table */
+            .tt-info-table {
+                width: 100%;
+                border-collapse: collapse;
                 font-size: 13px;
+            }
+
+            .tt-info-table th,
+            .tt-info-table td {
+                padding: 7px 14px;
+                border-bottom: 1px solid var(--contrail-border);
+                vertical-align: middle;
+            }
+
+            .tt-info-table th {
+                background: var(--contrail-th-bg);
                 color: var(--contrail-text-secondary);
+                font-weight: 500;
+                font-size: 12px;
+                white-space: nowrap;
+                width: 60px;
+                text-align: left;
             }
 
-            .tt-grid {
-                display: grid;
-                grid-template-columns: repeat(2, 1fr);
-                gap: 8px 16px;
-                margin-top: 10px;
-                background: rgba(0,0,0,0.02);
-                padding: 10px;
-                border-radius: 8px;
-            }
-
-            .tt-row {
-                display: flex;
-                flex-direction: column;
-                gap: 2px;
-            }
-
-            .tt-row span {
-                color: var(--contrail-text-secondary);
-            }
-            
-            .tt-row strong {
+            .tt-info-table td {
                 color: var(--contrail-text);
                 font-weight: 600;
+                font-size: 13px;
+            }
+
+            .tt-info-table tr:last-child th,
+            .tt-info-table tr:last-child td {
+                border-bottom: none;
+            }
+
+            /* Content Section */
+            .tt-section {
+                padding: 0 20px;
             }
 
             .tt-block {
-                margin-top: 12px;
+                margin-top: 14px;
             }
 
             .tt-block-title {
-                font-weight: bold;
+                font-size: 13px;
+                font-weight: 700;
                 margin-bottom: 4px;
+                padding-bottom: 4px;
+                border-bottom: 1px dashed var(--contrail-border);
                 color: var(--contrail-text);
             }
 
             .tt-block-body {
-                font-size: 14px;
+                font-size: 13px;
                 color: var(--contrail-text);
+                line-height: 1.7;
             }
 
+            /* Collapse */
             .tt-collapse {
-                margin-top: 12px;
+                margin-top: 10px;
+            }
+
+            .tt-collapse:last-child {
+                margin-bottom: 16px;
             }
 
             .tt-collapse-title {
                 cursor: pointer;
-                font-weight: bold;
-                color: var(--contrail-link);
+                font-size: 13px;
+                font-weight: 700;
+                color: var(--contrail-accent);
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                padding: 6px 0;
+                user-select: none;
+                transition: opacity 0.15s;
+            }
+
+            .tt-collapse-title:hover {
+                opacity: 0.75;
             }
 
             .tt-collapse-icon {
                 display: inline-block;
-                width: 1em;
+                width: 14px;
+                font-size: 10px;
+                text-align: center;
+                transition: transform 0.2s ease;
+            }
+
+            .tt-collapse.open .tt-collapse-icon {
+                transform: rotate(0deg);
+            }
+
+            .tt-collapse:not(.open) .tt-collapse-icon {
+                transform: rotate(-90deg);
             }
 
             .tt-collapse-label {
-                margin-left: 4px;
+                margin-left: 0;
             }
 
             .tt-collapse-body {
-                margin-top: 6px;
-                font-size: 14px;
+                font-size: 13px;
                 color: var(--contrail-text);
+                line-height: 1.7;
+                padding: 4px 0 2px 18px;
+                border-left: 2px solid var(--contrail-border);
+                margin-left: 6px;
             }
 
-            .tt-race-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 12px;
-                margin-top: 5px;
-            }
-
-            .tt-race-table th,
-            .tt-race-table td {
-                padding: 4px 6px;
-                border: 1px solid var(--contrail-border);
-                text-align: left;
-            }
-
-            .tt-race-table th {
-                background: rgba(0,0,0,0.05);
-                font-weight: bold;
-                color: var(--contrail-text);
-            }
-            
-            .tt-race-table td {
-                color: var(--contrail-text);
-            }
-
-            /* Stats Card Styles */
+            /* Stats Card */
             .tt-stats-card {
-                background: rgba(0,0,0,0.03);
-                border-radius: 8px;
-                padding: 10px;
-                margin-top: 8px;
+                margin: 12px 16px 0;
+                background: var(--contrail-accent-light);
+                border-radius: 10px;
+                padding: 14px 16px;
+                border: 1px solid rgba(255, 136, 166, 0.2);
             }
 
             .tt-stats-header {
-                font-size: 16px;
-                font-weight: bold;
-                margin-bottom: 8px;
                 display: flex;
                 align-items: baseline;
-                color: var(--contrail-text);
+                gap: 6px;
+                margin-bottom: 10px;
+            }
+
+            .tt-stats-title {
+                font-size: 17px;
+                font-weight: 700;
+                color: var(--contrail-accent);
             }
 
             .tt-stats-record {
-                font-family: var(--contrail-font-family);
-                font-size: 14px;
+                font-size: 13px;
                 color: var(--contrail-text-secondary);
-                margin-left: 4px;
-                font-weight: normal;
+                font-weight: 400;
             }
 
             .tt-stats-grid {
                 display: grid;
                 grid-template-columns: repeat(4, 1fr);
-                gap: 8px;
-                margin-bottom: 8px;
+                gap: 6px;
+                margin-bottom: 10px;
             }
 
             .tt-stat-item {
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                background: rgba(255,255,255,0.5);
-                border-radius: 6px;
-                padding: 4px;
+                background: rgba(255,255,255,0.7);
+                border-radius: 8px;
+                padding: 6px 4px;
             }
 
             .tt-stat-label {
                 font-size: 10px;
                 color: var(--contrail-text-secondary);
                 margin-bottom: 2px;
+                font-weight: 500;
             }
 
             .tt-stat-value {
-                font-size: 14px;
-                font-weight: bold;
+                font-size: 16px;
+                font-weight: 700;
                 color: var(--contrail-text);
             }
-            
-            .tt-stat-row {
+
+            .tt-detail-rows {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+
+            .tt-detail-row {
                 display: flex;
                 font-size: 13px;
-                margin-top: 4px;
-                line-height: 1.4;
+                line-height: 1.5;
             }
 
-            .tt-stat-row-label {
+            .tt-detail-label {
                 color: var(--contrail-text-secondary);
-                width: 60px;
+                width: 56px;
                 flex-shrink: 0;
+                font-weight: 500;
             }
 
-            .tt-stat-row-value {
+            .tt-detail-value {
                 color: var(--contrail-text);
                 font-weight: 500;
+            }
+
+            .tt-footer-space {
+                height: 6px;
             }
         `,
         inject() {
@@ -1443,13 +1495,9 @@
      * UI 组件渲染
      */
     const Components = {
-        row(label, val) {
+        cell(label, val) {
             const value = val ? Utils.escapeHTML(val) : '<span style="color:#ccc">/</span>';
-            return `
-            <div class="tt-row">
-                <span style="font-size:14px;">${label}</span>
-                <strong style="font-size:16px;">${value}</strong>
-            </div>`;
+            return `<th>${label}</th><td>${value}</td>`;
         },
 
         block(label, val) {
@@ -1525,7 +1573,7 @@
             return `
             <div class="tt-stats-card">
                 <div class="tt-stats-header">
-                    <span>${stats.total}战${stats.wins}胜</span>
+                    <span class="tt-stats-title">${stats.total}战${stats.wins}胜</span>
                     <span class="tt-stats-record">${recordStr}</span>
                 </div>
                 
@@ -1548,13 +1596,15 @@
                     </div>
                 </div>
 
-                <div class="tt-stat-row">
-                    <div class="tt-stat-row-label">主胜鞍</div>
-                    <div class="tt-stat-row-value">${majorWinsStr}</div>
-                </div>
-                <div class="tt-stat-row">
-                    <div class="tt-stat-row-label">前走</div>
-                    <div class="tt-stat-row-value">${latestStr}</div>
+                <div class="tt-detail-rows">
+                    <div class="tt-detail-row">
+                        <div class="tt-detail-label">主胜鞍</div>
+                        <div class="tt-detail-value">${majorWinsStr}</div>
+                    </div>
+                    <div class="tt-detail-row">
+                        <div class="tt-detail-label">前走</div>
+                        <div class="tt-detail-value">${latestStr}</div>
+                    </div>
                 </div>
             </div>`;
         },
@@ -1573,29 +1623,24 @@
                     ${fallbackTranslation}
                 </div>
 
-                <div class="tt-grid">
-                    ${this.row('性别', horse['性別'])}
-                    ${this.row('毛色', horse['毛色'])}
-                    ${this.row('调教师', horse['管理調教師'])}
-                    ${this.row('生产牧场', horse['生产牧场'])}
-                    ${this.row('母父', horse['母父名'])}
-                    ${this.row('母马', horse['母名'])}
-                    <div style="grid-column: span 2;">
-                        ${this.row('马主', horse['馬主'])}
-                    </div>
-                    
-                    ${this.row('注册日', Utils.formatDate(horse['registerDate']))}
-                    ${this.row('抹消日', Utils.formatDate(horse['retireDate']))}
-                    ${this.row('初出走', Utils.formatDate(horse['debutDate']))}
-                    ${this.row('初胜利', Utils.formatDate(horse['winDate']))}
-                    ${this.row('赏金', Utils.formatJPY(horse['prizeMoney']))}
-                    ${this.row('收得', Utils.formatJPY(horse['earnings']))}
-                </div>
+                <table class="tt-info-table">
+                    <tr>${this.cell('性别', horse['性別'])}${this.cell('毛色', horse['毛色'])}</tr>
+                    <tr>${this.cell('调教师', horse['管理調教師'])}${this.cell('生产牧场', horse['生产牧场'])}</tr>
+                    <tr>${this.cell('母父', horse['母父名'])}${this.cell('母马', horse['母名'])}</tr>
+                    <tr><th>马主</th><td colspan="3">${horse['馬主'] ? Utils.escapeHTML(horse['馬主']) : '<span style="color:#ccc">/</span>'}</td></tr>
+                    <tr>${this.cell('注册日', Utils.formatDate(horse['registerDate']))}${this.cell('抹消日', Utils.formatDate(horse['retireDate']))}</tr>
+                    <tr>${this.cell('初出走', Utils.formatDate(horse['debutDate']))}${this.cell('初胜利', Utils.formatDate(horse['winDate']))}</tr>
+                    <tr>${this.cell('赏金', Utils.formatJPY(horse['prizeMoney']))}${this.cell('收得', Utils.formatJPY(horse['earnings']))}</tr>
+                </table>
 
                 ${this.raceStats(horse.races)}
-                ${this.block('备注', horse['备考'])}
-                ${this.collapse('近况 / 牧场评价', horse['近况更新/近走/牧场评价'])}
-                ${this.collapse('血统分析', horse['血统分析'])}
+
+                <div class="tt-section">
+                    ${this.block('备注', horse['备考'])}
+                    ${this.collapse('近况 / 牧场评价', horse['近况更新/近走/牧场评价'])}
+                    ${this.collapse('血统分析', horse['血统分析'])}
+                </div>
+                <div class="tt-footer-space"></div>
             </div>`;
 
             const template = document.createElement('template');
