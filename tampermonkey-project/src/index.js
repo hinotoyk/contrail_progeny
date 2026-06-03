@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         云崽高亮器
 // @namespace    https://github.com/hinotoyk/contrail_progeny
-// @version      3.2.0
+// @version      3.3.0
 // @description  一键高亮云崽并展示相关数据
 // @author       hinotoyk
 // @license      CC BY-NC-SA 4.0
@@ -31,7 +31,7 @@
         MAIN_SHEET_ID: '1lUlndcCVPly7dV13LswGZKlaMu145XBVGxl4hXIkfus',
         MAIN_SHEETS: [
             { gid: '35201753', source: '2023', label: '2023年生（2025年2岁）' },
-            { gid: '2033113937', source: '2024', label: '2024年生（2026年2岁）' }
+            { gid: '320113071', source: '2024', label: '2024年生（2026年2岁）' }
         ],
         // 辅助数据源：赛绩 & 登录信息
         SHEET_URL: `https://docs.google.com/spreadsheets/d/1PPasJnqqBQy_cbhXLDJ0V11CTUDJs6UBtRwe-nsCNfc/export?format=csv&gid=0`,
