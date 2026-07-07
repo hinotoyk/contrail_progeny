@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         云崽高亮器
 // @namespace    https://github.com/hinotoyk/contrail_progeny
-// @version      3.3.0
+// @version      3.4.0
 // @description  一键高亮云崽并展示相关数据
 // @author       hinotoyk
 // @license      CC BY-NC-SA 4.0
@@ -942,6 +942,21 @@
             }
 
             return merged;
+        },
+
+        /**
+         * 清除全部 GM 缓存，用于手动刷新
+         */
+        clearCache() {
+            Constants.MAIN_SHEETS.forEach(cfg => {
+                GM_setValue(`main_sheet_${cfg.source}`, null);
+                GM_setValue(`main_sheet_${cfg.source}_time`, 0);
+            });
+            GM_setValue(Constants.CACHE_KEY, null);
+            GM_setValue(Constants.SHEET_CACHE_KEY, null);
+            GM_setValue(Constants.SHEET_CACHE_KEY + '_time', 0);
+            GM_setValue(Constants.RACE_SHEET_CACHE_KEY, null);
+            GM_setValue(Constants.RACE_SHEET_CACHE_KEY + '_time', 0);
         }
     };
 
@@ -1488,6 +1503,93 @@
             .tt-footer-space {
                 height: 6px;
             }
+
+            .contrail-refresh-btn {
+                position: fixed;
+                bottom: 24px;
+                right: 24px;
+                z-index: 2147483645;
+                width: 44px;
+                height: 44px;
+                border-radius: 50%;
+                background: rgba(255, 136, 166, 0.95);
+                color: #fff;
+                border: none;
+                box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0;
+                font-family: var(--contrail-font-family);
+                transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+            }
+
+            .contrail-refresh-btn:hover {
+                transform: scale(1.08);
+                box-shadow: 0 6px 20px rgba(255, 136, 166, 0.55);
+                background: rgba(255, 136, 166, 1);
+            }
+
+            .contrail-refresh-btn:active {
+                transform: scale(0.96);
+            }
+
+            .contrail-refresh-btn:disabled {
+                cursor: not-allowed;
+                opacity: 0.65;
+            }
+
+            .contrail-refresh-btn svg {
+                width: 22px;
+                height: 22px;
+                fill: currentColor;
+            }
+
+            .contrail-refresh-btn.is-loading svg {
+                animation: contrail-spin 0.8s linear infinite;
+            }
+
+            @keyframes contrail-spin {
+                from { transform: rotate(0deg); }
+                to   { transform: rotate(360deg); }
+            }
+
+            .contrail-refresh-toast {
+                position: fixed;
+                bottom: 78px;
+                right: 24px;
+                z-index: 2147483645;
+                background: var(--contrail-bg);
+                color: var(--contrail-text);
+                border: 1px solid var(--contrail-border);
+                border-radius: 10px;
+                padding: 8px 14px;
+                font-size: 13px;
+                font-weight: 500;
+                font-family: var(--contrail-font-family);
+                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+                opacity: 0;
+                transform: translateY(8px);
+                transition: opacity 0.2s ease, transform 0.2s ease;
+                pointer-events: none;
+                max-width: 280px;
+            }
+
+            .contrail-refresh-toast.is-visible {
+                opacity: 1;
+                transform: translateY(0);
+            }
+
+            .contrail-refresh-toast.is-success {
+                border-color: rgba(76, 175, 80, 0.4);
+                color: #2e7d32;
+            }
+
+            .contrail-refresh-toast.is-error {
+                border-color: rgba(211, 47, 47, 0.4);
+                color: #c62828;
+            }
         `,
         inject() {
             GM_addStyle(this.CSS);
@@ -1708,12 +1810,19 @@
         dataCache: null,
         mapCache: null,
         observer: null,
+        refreshButton: null,
+        refreshToast: null,
+        _toastTimer: null,
 
         init() {
             Styles.inject();
             SiteManager.init({
                 onSiteEnabled: () => this.enableForCurrentSite()
             });
+
+            if (typeof GM_registerMenuCommand === 'function') {
+                GM_registerMenuCommand('Contrail · 刷新数据', () => this.refreshData());
+            }
 
             if (SiteManager.isCurrentSiteEnabled()) {
                 this.enableForCurrentSite();
@@ -1725,6 +1834,7 @@
 
             if (this.dataCache) {
                 this.highlight(this.dataCache);
+                this.ensureRefreshButton();
                 return;
             }
 
@@ -1734,12 +1844,106 @@
                     const data = await DataManager.getData();
                     this.dataCache = data;
                     this.highlight(data);
+                    this.ensureRefreshButton();
                 } catch (err) {
                     console.error('Failed to load horse data:', err);
                 } finally {
                     this.loading = false;
                 }
             });
+        },
+
+        ensureRefreshButton() {
+            if (this.refreshButton || !document.body) return;
+
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'contrail-refresh-btn';
+            btn.title = '刷新数据';
+            btn.setAttribute('aria-label', '刷新数据');
+            btn.innerHTML = `
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.74 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                </svg>
+            `;
+            btn.addEventListener('click', () => this.refreshData());
+            document.body.appendChild(btn);
+            this.refreshButton = btn;
+
+            const toast = document.createElement('div');
+            toast.className = 'contrail-refresh-toast';
+            toast.setAttribute('role', 'status');
+            document.body.appendChild(toast);
+            this.refreshToast = toast;
+        },
+
+        showRefreshToast(message, type) {
+            if (!this.refreshToast) return;
+            this.refreshToast.textContent = message;
+            this.refreshToast.classList.remove('is-success', 'is-error');
+            if (type) this.refreshToast.classList.add(`is-${type}`);
+            this.refreshToast.classList.add('is-visible');
+            clearTimeout(this._toastTimer);
+            this._toastTimer = setTimeout(() => {
+                this.refreshToast.classList.remove('is-visible');
+            }, 2200);
+        },
+
+        clearHighlights() {
+            document.querySelectorAll('.horse-highlight').forEach(span => {
+                const original = span.dataset.originalText;
+                if (original === undefined) return;
+                const textNode = document.createTextNode(original);
+                if (span.parentNode) {
+                    span.parentNode.replaceChild(textNode, span);
+                }
+            });
+            document.querySelectorAll('.horse-tooltip').forEach(t => t.remove());
+        },
+
+        async refreshData() {
+            if (this.loading) return;
+
+            if (!SiteManager.isCurrentSiteEnabled()) {
+                this.showRefreshToast('当前站点未启用，无法刷新', 'error');
+                return;
+            }
+
+            this.loading = true;
+            if (this.refreshButton) {
+                this.refreshButton.classList.add('is-loading');
+                this.refreshButton.disabled = true;
+            }
+            this.showRefreshToast('正在刷新数据...');
+
+            try {
+                // 断开观察器，避免清空时把旧 span 误判
+                if (this.observer) {
+                    this.observer.disconnect();
+                    this.observer = null;
+                }
+
+                DataManager.clearCache();
+                this.dataCache = null;
+                this.mapCache = null;
+                this.clearHighlights();
+
+                const data = await DataManager.getData();
+                this.dataCache = data;
+                this.highlight(data);
+                this.ensureRefreshButton();
+
+                this.showRefreshToast(`刷新成功 (${data.length} 条)`, 'success');
+            } catch (err) {
+                console.error('Refresh failed:', err);
+                this.showRefreshToast('刷新失败，请重试', 'error');
+            } finally {
+                this.loading = false;
+                if (this.refreshButton) {
+                    this.refreshButton.classList.remove('is-loading');
+                    this.refreshButton.disabled = false;
+                }
+            }
         },
 
         setupMutationObserver() {
@@ -1798,46 +2002,55 @@
             const nodes = [];
             while (walker.nextNode()) nodes.push(walker.currentNode);
 
+            // 按名字长度降序排序，优先匹配长名
+            // 避免 "アンソニー" 误匹配 "アンソニーシチー" 中的子串
+            const entries = [...map.entries()].sort((a, b) => b[0].length - a[0].length);
+
+            // 词边界检测：前后字符若是"字字符"（字母/数字/汉字/假名），说明是更长名字的一部分，跳过
+            const isWordChar = (c) => c && /[\p{L}\p{N}\p{M}]/u.test(c);
+
             nodes.forEach(node => {
                 const text = node.nodeValue;
                 if (!text || !text.trim()) return;
 
-                // Simple check before iterating map
-                let found = false;
-
-                // Convert Map keys to array for iteration to break early
-                for (const [name, horse] of map.entries()) {
+                for (const [name, horse] of entries) {
                     const index = text.indexOf(name);
-                    if (index !== -1) {
-                        // Split text node to isolate the matching part
-                        const matchNode = node.splitText(index);
-                        matchNode.splitText(name.length);
+                    if (index === -1) continue;
 
-                        // 高亮文本生成
-                        const translation = horse['港译'] || horse['译名'];
-                        const highlightedName = translation
-                            ? `${Utils.escapeHTML(name)}【${Utils.escapeHTML(translation)}】`
-                            : Utils.escapeHTML(name);
-
-                        const span = document.createElement('span');
-                        span.className = 'horse-highlight';
-                        span.innerHTML = highlightedName;
-
-                        // 生成 Tooltip
-                        const tooltip = Components.renderTooltip(horse);
-                        document.body.appendChild(tooltip);
-                        // tooltip.classList.add('horse-tooltip--floating'); // Removed, handled by base class + visible class
-
-                        // Tooltip 交互逻辑
-                        this.attachTooltipEvents(span, tooltip);
-
-                        if (matchNode.parentNode) {
-                            matchNode.parentNode.replaceChild(span, matchNode);
-                        }
-
-                        found = true;
-                        break; // Only highlight first match per text node to avoid complexity
+                    // 词边界检查：确保匹配是独立的名字片段
+                    const before = index > 0 ? text[index - 1] : '';
+                    const after = index + name.length < text.length ? text[index + name.length] : '';
+                    if (isWordChar(before) || isWordChar(after)) {
+                        continue;
                     }
+
+                    // Split text node to isolate the matching part
+                    const matchNode = node.splitText(index);
+                    matchNode.splitText(name.length);
+
+                    // 高亮文本生成
+                    const translation = horse['港译'] || horse['译名'];
+                    const highlightedName = translation
+                        ? `${Utils.escapeHTML(name)}【${Utils.escapeHTML(translation)}】`
+                        : Utils.escapeHTML(name);
+
+                    const span = document.createElement('span');
+                    span.className = 'horse-highlight';
+                    span.innerHTML = highlightedName;
+                    span.dataset.originalText = matchNode.nodeValue;
+
+                    // 生成 Tooltip
+                    const tooltip = Components.renderTooltip(horse);
+                    document.body.appendChild(tooltip);
+
+                    // Tooltip 交互逻辑
+                    this.attachTooltipEvents(span, tooltip);
+
+                    if (matchNode.parentNode) {
+                        matchNode.parentNode.replaceChild(span, matchNode);
+                    }
+
+                    break; // Only highlight first match per text node to avoid complexity
                 }
             });
         },
@@ -1850,7 +2063,11 @@
             if (!Array.isArray(horses) || !horses.length) return;
 
             const map = new Map();
-            horses.forEach(h => h && h['馬名'] && map.set(h['馬名'], h));
+            horses.forEach(h => {
+                if (!h || !h['馬名']) return;
+                const cleanName = String(h['馬名']).trim();
+                if (cleanName) map.set(cleanName, h);
+            });
             this.mapCache = map;
 
             const process = () => {
