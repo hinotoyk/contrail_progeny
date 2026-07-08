@@ -144,6 +144,30 @@
             return `${yyyy}-${mm}-${dd}`;
         },
 
+        calculateAge(birthYear) {
+            const year = Number(birthYear);
+            if (!year || Number.isNaN(year)) return null;
+            return new Date().getFullYear() - year;
+        },
+
+        formatGender(gender, birthYear) {
+            const age = this.calculateAge(birthYear);
+            if (age === null || Number.isNaN(age)) return gender || '';
+            return `${gender || ''}${age}`;
+        },
+
+        gradeBadge(grade) {
+            const g = (grade || '').trim();
+            if (!g) return '';
+            let cls = 'tt-grade-badge';
+            if (g === 'GI' || g === 'JpnI') cls += ' tt-grade-badge--g1';
+            else if (g === 'GII' || g === 'JpnII') cls += ' tt-grade-badge--g2';
+            else if (g === 'GIII' || g === 'JpnIII') cls += ' tt-grade-badge--g3';
+            else if (g === 'L') cls += ' tt-grade-badge--l';
+            else cls += ' tt-grade-badge--op';
+            return ` <span class="${cls}">${Utils.escapeHTML(g)}</span>`;
+        },
+
         loadAlpine(cb) {
             if (window.Alpine) return cb();
             const script = document.createElement('script');
@@ -1500,6 +1524,40 @@
                 font-weight: 500;
             }
 
+            .tt-detail-row--highlight {
+                font-size: 15px;
+                line-height: 1.6;
+                padding: 6px 8px;
+                background: rgba(255,255,255,0.55);
+                border-radius: 8px;
+                margin: 0 -4px;
+            }
+
+            .tt-detail-row--highlight .tt-detail-label {
+                font-weight: 700;
+                color: var(--contrail-text);
+                width: 64px;
+            }
+
+            .tt-grade-badge {
+                display: inline-block;
+                font-size: 11px;
+                font-weight: 700;
+                line-height: 1;
+                padding: 3px 6px;
+                border-radius: 10px;
+                color: #fff;
+                margin-left: 4px;
+                vertical-align: middle;
+                white-space: nowrap;
+            }
+
+            .tt-grade-badge--g1 { background: #d32f2f; }
+            .tt-grade-badge--g2 { background: #1976d2; }
+            .tt-grade-badge--g3 { background: #388e3c; }
+            .tt-grade-badge--l { background: #c9a227; }
+            .tt-grade-badge--op { background: #d4a84b; }
+
             .tt-footer-space {
                 height: 6px;
             }
@@ -1646,20 +1704,19 @@
                     const isOpOrHigher = grade && Constants.GRADE_ORDER.indexOf(grade) !== -1 && Constants.GRADE_ORDER.indexOf(grade) <= 7;
 
                     let displayName;
+                    let gradeBadge = '';
                     if (isOpOrHigher) {
-                        // OP及以上：25'xxx(G1)
+                        // OP及以上：25'xxx G1
                         const yy = w.date ? String(new Date(w.date).getFullYear()).slice(-2) : '';
                         const prefix = yy ? `${yy}'` : '';
-                        displayName = `${prefix}${name}(${grade})`;
+                        displayName = `${prefix}${name}`;
+                        gradeBadge = Utils.gradeBadge(grade);
                     } else {
                         // 条件赛：xxx
                         displayName = name;
                     }
 
-                    if (grade === 'GI' || grade === 'JpnI') {
-                        return `<b style="color:#d32f2f">${displayName}</b>`; // G1 wins highlighted red
-                    }
-                    return displayName;
+                    return `${displayName}${gradeBadge}`;
                 }).join('、')
                 : '-';
 
@@ -1671,7 +1728,7 @@
                 const grade = (latest.grade || '').trim();
                 const isOpOrHigher = grade && Constants.GRADE_ORDER.indexOf(grade) !== -1 && Constants.GRADE_ORDER.indexOf(grade) <= 7;
 
-                const displayName = isOpOrHigher ? `${name}(${grade})` : name;
+                const displayName = isOpOrHigher ? `${name}${Utils.gradeBadge(grade)}` : name;
 
                 latestStr = `${displayName} <span style="font-weight:bold; color:${latest.result == 1 ? '#d32f2f' : 'inherit'}">(${Utils.escapeHTML(latest.result)})</span>`;
             }
@@ -1703,11 +1760,11 @@
                 </div>
 
                 <div class="tt-detail-rows">
-                    <div class="tt-detail-row">
+                    <div class="tt-detail-row tt-detail-row--highlight">
                         <div class="tt-detail-label">主胜鞍</div>
                         <div class="tt-detail-value">${majorWinsStr}</div>
                     </div>
-                    <div class="tt-detail-row">
+                    <div class="tt-detail-row tt-detail-row--highlight">
                         <div class="tt-detail-label">前走</div>
                         <div class="tt-detail-value">${latestStr}</div>
                     </div>
@@ -1730,7 +1787,7 @@
                 </div>
 
                 <table class="tt-info-table">
-                    <tr>${this.cell('性别', horse['性別'])}${this.cell('毛色', horse['毛色'])}</tr>
+                    <tr>${this.cell('性别', Utils.formatGender(horse['性別'], horse['_source']))}${this.cell('毛色', horse['毛色'])}</tr>
                     <tr>${this.cell('调教师', horse['管理調教師'])}${this.cell('生产牧场', horse['生产牧场'])}</tr>
                     <tr>${this.cell('母父', horse['母父名'])}${this.cell('母马', horse['母名'])}</tr>
                     <tr><th>马主</th><td colspan="3">${horse['馬主'] ? Utils.escapeHTML(horse['馬主']) : '<span style="color:#ccc">/</span>'}</td></tr>
